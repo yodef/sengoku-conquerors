@@ -109,6 +109,7 @@
                     <button id="btnReinforce">➕ Refuerzos (Gasta 1 Ashigaru)</button>
                     <button id="btnCampaign">🏯 Campaña (Funda Shiro - Gasta 2)</button>
                     <button id="btnResolveCombats">⚔️ Resolver Combates</button>
+                    <button id="btnUndoAction" style="background:#5c4a3b; color:#ffe8b3;" title="Deshacer última acción de tu turno (Ctrl+Z)">↩️ Deshacer Acción (Undo)</button>
                     <button id="btnPassTurn" style="background:#4a3f35; color:#ddd;">⏩ Pasar Turno</button>
                 </div>
             </div>
@@ -324,7 +325,7 @@
                     <div class="telemetry-stat"><span class="t-label">Mitigaciones Guarnición:</span> <b id="statGarrisonSaves" style="color:#27ae60;">0</b></div>
                     <div class="telemetry-stat"><span class="t-label">Soporte Asedio Defendido:</span> <b id="statSiegeSupports" style="color:#c0392b;">0</b></div>
                     <div class="telemetry-stat"><span class="t-label">🏃 Retiradas con Honor:</span> <b id="statTacticalRetreats" style="color:#2980b9;">0</b></div>
-                    <div class="telemetry-stat"><span class="t-label">🚩 Gritos de Guerra:</span> <b id="statBannersSpentWarCry" style="color:#d35400;">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">🚩 Estandartes Sacrificados:</span> <b id="statBannersSpentWarCry" style="color:#d35400;">0</b></div>
                     <div class="telemetry-stat"><span class="t-label">⚔️ Combates con Flanqueo:</span> <b id="statFlankingCombats" style="color:#16a085;">0</b></div>
                     <div class="telemetry-stat"><span class="t-label">👑 Daimyōs Caídos:</span> <b id="statLeadersDefeated" style="color:#e67e22;">0</b></div>
                 </div>
@@ -384,12 +385,52 @@
         </div>
     </div>
 
+    <!-- Modal: Elección de Unidad a Mover (Daimyō vs Ashigaru) -->
+    <div id="unitChoiceModal" class="modal-overlay" style="display:none; z-index:1002;">
+        <div class="modal-content" style="max-width: 440px; border: 2px solid #b89758; text-align: center; background: #fffcf9;">
+            <h2 style="font-size: 1.15rem; color: #962d22; margin-bottom: 8px;">
+                👑 Selección de Unidad a Mover
+            </h2>
+            <div id="unitChoiceDesc" style="font-size: 0.83rem; color: #4a3f35; margin-bottom: 14px; line-height: 1.4;">
+                Hay tropas agrupadas junto al Daimyō en la casilla de origen. Elige qué unidad deseas avanzar:
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px;">
+                <button id="btnChooseLeader" class="primary" style="background: linear-gradient(180deg, #d4ac0d 0%, #b7950b 100%); color: #111; font-weight: bold; padding: 11px; font-size: 0.88rem; border-color: #ffd700;">
+                    👑 Mover Daimyō (+2 Poder en Combates)
+                </button>
+                <button id="btnChooseAshigaru" style="background: #4a3f35; color: #fff; padding: 11px; font-size: 0.88rem;">
+                    ⚔️ Mover Ashigaru (Tropa regular, +1 Poder)
+                </button>
+            </div>
+            <div style="text-align: right;">
+                <button id="btnCancelUnitChoice" style="background: #887766; color: #fff; font-size: 0.78rem; padding: 4px 10px;">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Reacciones Opcionales de Combate (Regla v1.4) -->
     <div id="reactionModal" class="modal-overlay" style="display:none; z-index:1000;">
         <div class="modal-content" style="max-width: 530px; border: 2px solid #b89758; background: #fffcf9;">
-            <h2 style="color: #962d22; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
-                ⚔️ Opciones de Reacción en Combate (Hex #<span id="reactionHexId">-</span>)
-            </h2>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ebd5c8; padding-bottom:6px; margin-bottom:10px;">
+                <h2 style="color: #962d22; font-size: 1.15rem; margin:0; display: flex; align-items: center; gap: 8px;">
+                    ⚔️ Opciones de Combate (Hex #<span id="reactionHexId">-</span>)
+                </h2>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <button id="btnMinimizeReactionModal" title="Minimizar ventana para ver el tablero completo" style="padding:4px 9px; font-size:0.75rem; background:#4a3f35; color:#ffe8b3; border:1px solid #b89758; border-radius:3px; cursor:pointer;">
+                        🗕 Minimizar Tablero
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mini Screenshot del Hexágono de Combate y Vecinos -->
+            <div id="combatMiniCanvasContainer" style="text-align:center; margin-bottom:10px; background:#f4ece1; border:1px solid #d5c8ad; border-radius:6px; padding:6px;">
+                <div style="font-size:0.73rem; color:#665544; font-weight:bold; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; padding:0 4px;">
+                    <span>📸 Vista Táctica del Combate y Flancos</span>
+                    <span style="font-size:0.7rem; color:#887766;">(Centro: Combate | Bordes verdes: Flanqueo)</span>
+                </div>
+                <canvas id="combatMiniCanvas" width="360" height="190" style="max-width:100%; height:auto; background:#f5ebcf; border-radius:4px; box-shadow:0 1px 4px rgba(0,0,0,0.15); display:block; margin:0 auto;"></canvas>
+            </div>
+
             <div id="reactionCombatDesc" style="font-size: 0.82rem; color: #4a3f35; line-height: 1.45; background: #fdf6e7; padding: 10px; border-radius: 5px; border-left: 4px solid #b89758;">
                 <!-- Desglose de fuerzas y bajas base -->
             </div>
@@ -403,6 +444,14 @@
                 <button id="btnConfirmReactions" class="primary" style="background: linear-gradient(180deg, #27ae60 0%, #1e8449 100%);">⚔️ Confirmar y Resolver</button>
             </div>
         </div>
+    </div>
+
+    <!-- Floating Pill al Minimizar Modal de Combate -->
+    <div id="minimizedCombatPill" class="minimized-combat-pill" style="display:none;">
+        <span style="font-size:0.84rem;">⚔️ <b>Combate pendiente en Hex #<span id="minimizedCombatHexId">-</span></b></span>
+        <button id="btnRestoreReactionModal" class="primary" style="padding:4px 12px; font-size:0.78rem;">
+            🗖 Restaurar Opciones
+        </button>
     </div>
 
     <!-- Scripts -->

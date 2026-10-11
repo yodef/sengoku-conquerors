@@ -113,6 +113,7 @@ class GameEngine {
         this.winner = null;
         this.claimedFeats = {}; // featId -> clanId
         this.finalRoundTriggered = false;
+        this.turnUndoStack = [];
 
         // Telemetría profunda para análisis de balance
         this.telemetry = {
@@ -132,6 +133,7 @@ class GameEngine {
             aldeaExtraTroopsAwarded: 0,
             tacticalRetreats: 0,
             bannersSpentWarCry: 0,
+            bannersSpentDefense: 0,
             flankingCombats: 0,
             leadersDefeated: 0,
             coronationsTriggered: 0,
@@ -232,6 +234,7 @@ class GameEngine {
         this.regicideEvent = null;
         this.victoryReason = null;
         this.isProcessing = false;
+        this.turnUndoStack = [];
 
         this.addLog(`=== Comienza Sengoku Conquerors 1.4 (${this.players.length} Clanes) ===`, 'system');
         this.addLog(`👑 ${this.getActivePlayer().short} recibe la Ficha de Mando al azar (inicia la partida y desempata).`, 'feat');
@@ -250,6 +253,108 @@ class GameEngine {
 
     getMandoPlayer() {
         return this.players[this.mandoPlayerIdx];
+    }
+
+    // =========================================================================
+    // ↩️ SISTEMA DE DESHACER ACCIÓN (UNDO) POR TURNO
+    // =========================================================================
+
+    getTurnSnapshot() {
+        const hexMapData = [];
+        this.hexMap.forEach(h => {
+            hexMapData.push({
+                id: h.id,
+                troops: h.troops ? JSON.parse(JSON.stringify(h.troops)) : {},
+                shiro: h.shiro,
+                garrison: h.garrison,
+                siege: h.siege,
+                leader: h.leader,
+                attacker: h.attacker
+            });
+        });
+
+        return {
+            round: this.round,
+            turnPhase: this.turnPhase,
+            movesLeft: this.movesLeft,
+            campaignUsedThisTurn: this.campaignUsedThisTurn,
+            activePlayerIdx: this.activePlayerIdx,
+            mandoPlayerIdx: this.mandoPlayerIdx,
+            lastSetupShiroHexId: this.lastSetupShiroHexId,
+            players: JSON.parse(JSON.stringify(this.players)),
+            hexMapData: hexMapData,
+            claimedFeats: JSON.parse(JSON.stringify(this.claimedFeats || {})),
+            finalRoundTriggered: this.finalRoundTriggered,
+            coronationRoundActive: this.coronationRoundActive,
+            coronationCandidateId: this.coronationCandidateId,
+            regicideUsurperId: this.regicideUsurperId,
+            regicideEvent: this.regicideEvent,
+            telemetry: JSON.parse(JSON.stringify(this.telemetry || {})),
+            logLength: this.log.length
+        };
+    }
+
+    restoreTurnSnapshot(snap) {
+        if (!snap) return;
+        this.round = snap.round;
+        this.turnPhase = snap.turnPhase;
+        this.movesLeft = snap.movesLeft;
+        this.campaignUsedThisTurn = snap.campaignUsedThisTurn;
+        this.activePlayerIdx = snap.activePlayerIdx;
+        this.mandoPlayerIdx = snap.mandoPlayerIdx;
+        this.lastSetupShiroHexId = snap.lastSetupShiroHexId;
+        this.players = JSON.parse(JSON.stringify(snap.players));
+        this.claimedFeats = JSON.parse(JSON.stringify(snap.claimedFeats));
+        this.finalRoundTriggered = snap.finalRoundTriggered;
+        this.coronationRoundActive = snap.coronationRoundActive;
+        this.coronationCandidateId = snap.coronationCandidateId;
+        this.regicideUsurperId = snap.regicideUsurperId;
+        this.regicideEvent = snap.regicideEvent;
+        this.telemetry = JSON.parse(JSON.stringify(snap.telemetry));
+
+        // Restaurar estado de cada casilla en el mapa
+        snap.hexMapData.forEach(hd => {
+            const h = this.hexMap.get(hd.id);
+            if (h) {
+                h.troops = JSON.parse(JSON.stringify(hd.troops));
+                h.shiro = hd.shiro;
+                h.garrison = hd.garrison;
+                h.siege = hd.siege;
+                h.leader = hd.leader;
+                if (hd.attacker !== undefined) h.attacker = hd.attacker;
+                else delete h.attacker;
+            }
+        });
+
+        // Recortar la bitácora de mensajes al punto del snapshot
+        if (typeof snap.logLength === 'number' && this.log.length > snap.logLength) {
+            this.log.length = snap.logLength;
+        }
+    }
+
+    saveUndoSnapshot() {
+        if (!this.turnUndoStack) this.turnUndoStack = [];
+        this.turnUndoStack.push(this.getTurnSnapshot());
+    }
+
+    canUndo() {
+        if (this.isProcessing || this.gameOver) return false;
+        const p = this.getActivePlayer();
+        if (p && p.isAi) return false;
+        return !!(this.turnUndoStack && this.turnUndoStack.length > 1);
+    }
+
+    undoLastAction() {
+        if (!this.canUndo()) {
+            this.addLog('No hay acciones previas que deshacer en este turno.', 'warning');
+            return false;
+        }
+        this.turnUndoStack.pop(); // Quitar estado actual
+        const prevSnap = this.turnUndoStack[this.turnUndoStack.length - 1];
+        this.restoreTurnSnapshot(prevSnap);
+        this.addLog('↩️ [DESHACER] Acción deshecha con éxito. Se ha restaurado la posición anterior.', 'info');
+        this.notifyStateChange();
+        return true;
     }
 
     // =========================================================================
@@ -281,6 +386,8 @@ class GameEngine {
             this.addLog('Debes elegir una Fortaleza (Toride) libre en el mapa.', 'warning');
             return false;
         }
+
+        this.saveUndoSnapshot();
 
         const hex = this.hexMap.get(hexId);
         hex.shiro = p.id;
@@ -323,6 +430,8 @@ class GameEngine {
             this.addLog('Debes colocar a tu Daimyō inicial en una celda adyacente a tu Castillo.', 'warning');
             return false;
         }
+
+        this.saveUndoSnapshot();
 
         const hex = this.hexMap.get(hexId);
         hex.troops[p.id] = (hex.troops[p.id] || 0) + 1;
@@ -452,6 +561,7 @@ class GameEngine {
         this.addLog(`${p.short} inicia su turno. Recluta ${actualDraw} Ashigaru a su mano (Mano: ${p.handTroops}, Reserva: ${p.reserveTroops}).`, 'action');
 
         this.turnPhase = 'PREPARATION';
+        this.turnUndoStack = [this.getTurnSnapshot()];
         this.checkFeats(false);
         this.notifyStateChange();
 
@@ -500,6 +610,8 @@ class GameEngine {
             this.addLog('Esa casilla no es válida para refuerzo (debe ser adyacente a tu Castillo y tener < 3 tropas).', 'warning');
             return false;
         }
+
+        this.saveUndoSnapshot();
 
         const hex = this.hexMap.get(hexId);
         if (!hex.troops) hex.troops = {};
@@ -559,6 +671,8 @@ class GameEngine {
             return false;
         }
 
+        this.saveUndoSnapshot();
+
         const hex = this.hexMap.get(hexId);
         hex.shiro = p.id;
         p.handTroops -= this.rules.CAMPAIGN_TROOP_COST;
@@ -574,6 +688,7 @@ class GameEngine {
     }
 
     goToManeuverPhase() {
+        this.saveUndoSnapshot();
         this.turnPhase = 'MANEUVER';
         this.movesLeft = this.rules.MAX_MOVES_PER_TURN;
         this.addLog(`🏹 Fase de Maniobra: ${this.getActivePlayer().short} puede mover hasta ${this.movesLeft} tropas.`, 'info');
@@ -601,6 +716,9 @@ class GameEngine {
             if (n.shiro) {
                 // Caso A: Castillo Propio
                 if (n.shiro === clanId) {
+                    // Si el único efectivo en origen es el Daimyō, no puede quedar fijo como guarnición estática
+                    if (fromHex.leader === clanId && (fromHex.troops[clanId] || 0) === 1) return;
+
                     // Si ya tiene Guarnición propia, nadie más puede entrar (capacidad 1)
                     if (n.garrison) return;
 
@@ -653,7 +771,7 @@ class GameEngine {
         return valid;
     }
 
-    moveTroop(fromHexId, toHexId) {
+    moveTroop(fromHexId, toHexId, moveLeader = null) {
         const p = this.getActivePlayer();
         if (this.movesLeft <= 0) {
             this.addLog('Ya usaste todos tus movimientos este turno.', 'warning');
@@ -671,16 +789,43 @@ class GameEngine {
         if (!fromHex.troops) fromHex.troops = {};
         if (!toHex.troops) toHex.troops = {};
 
+        // Guardar snapshot de deshacer antes de modificar el estado
+        this.saveUndoSnapshot();
+
+        // Determinar si se mueve el Daimyō o un Ashigaru regular
+        const hasLeaderHere = (fromHex.leader === p.id);
+        const currentCount = fromHex.troops[p.id] || 0;
+        let isMovingLeader = false;
+
+        if (hasLeaderHere) {
+            if (toHex.shiro === p.id) {
+                // El Daimyō no puede ser asignado como guarnición estática en un castillo propio
+                isMovingLeader = false;
+            } else if (moveLeader === true) {
+                isMovingLeader = true;
+            } else if (moveLeader === false) {
+                isMovingLeader = false;
+            } else {
+                // Si no se especificó y solo queda 1 tropa en la casilla (el Daimyō), se mueve el Daimyō
+                isMovingLeader = (currentCount === 1);
+            }
+        }
+
         // Restar 1 tropa de la casilla de origen
         fromHex.troops[p.id] -= 1;
         if (fromHex.troops[p.id] <= 0) delete fromHex.troops[p.id];
+
+        if (isMovingLeader) {
+            fromHex.leader = null;
+        }
+
         this.movesLeft -= 1;
         this.telemetry.totalMovesMade = (this.telemetry.totalMovesMade || 0) + 1;
 
         // --- DESTINO: CASTILLO (Shiro) ---
         // Solo 1 pieza activa permitida dentro del castillo
         if (toHex.shiro) {
-            // Caso 1: Castillo Propio
+            // Caso 1: Castillo Propio (Solo Ashigaru entra como guarnición)
             if (toHex.shiro === p.id) {
                 // Si estaba asediado por un enemigo
                 if (toHex.siege) {
@@ -706,6 +851,7 @@ class GameEngine {
 
                         // La tropa del dueño no puede penetrar; se mantiene en su casilla de origen
                         fromHex.troops[p.id] = (fromHex.troops[p.id] || 0) + 1;
+                        if (isMovingLeader) fromHex.leader = p.id;
 
                         this.addLog(`🛡️ [SOPORTE DE ASEDIO] ¡Las tropas aliadas de ${rivalPlayer?.short || rivalClan} en Hex #${supHexId} defienden el cerco! 1 tropa de soporte regresa a su Reserva, pero el Asedio en Castillo #${toHexId} SE MANTIENE INTACTO. El intento de ${p.short} de guarecerse es repelido.`, 'feat');
                         this.updateToriiControlRecord();
@@ -719,6 +865,10 @@ class GameEngine {
                         this.addLog(`🏯 ¡Asedio repelido! Sin tropas de soporte rivales alrededor, ${p.short} libera su Castillo en Hex #${toHexId}. La tropa asediadora de ${rivalPlayer.short} regresa a su Reserva (Reserva: ${rivalPlayer.reserveTroops}).`, 'feat');
                     }
                     toHex.siege = null;
+                    if (toHex.leader === rivalClan) {
+                        toHex.leader = null;
+                        if (rivalPlayer) rivalPlayer.leaderHexId = null;
+                    }
                     this.telemetry.siegesRepelled = (this.telemetry.siegesRepelled || 0) + 1;
                 }
                 // Se establece como Guarnición fija del castillo
@@ -738,9 +888,13 @@ class GameEngine {
                     }
                 }
                 toHex.siege = p.id;
+                if (isMovingLeader) {
+                    toHex.leader = p.id;
+                    p.leaderHexId = toHexId;
+                }
                 p.siegesSuccess += 1;
                 this.telemetry.siegesSuccess++;
-                this.addLog(`🔥 ¡ASEDIO EXITOSO! ${p.short} ocupa el Castillo rival de Hex #${toHexId} (${CLANS[toHex.shiro]?.short}).`, 'feat');
+                this.addLog(`🔥 ¡ASEDIO EXITOSO! ${p.short} ${isMovingLeader ? 'con su Daimyō al mando ' : ''}ocupa el Castillo rival de Hex #${toHexId} (${CLANS[toHex.shiro]?.short}).`, 'feat');
 
                 if (this.finalRoundTriggered && this.coronationCandidateId && toHex.shiro === this.coronationCandidateId) {
                     const pCand = this.players.find(x => x.id === this.coronationCandidateId);
@@ -758,8 +912,7 @@ class GameEngine {
         // --- DESTINO: HEXÁGONO REGULAR (No Castillo) ---
         else {
             toHex.troops[p.id] = (toHex.troops[p.id] || 0) + 1;
-            if (fromHex.leader === p.id) {
-                fromHex.leader = null;
+            if (isMovingLeader) {
                 toHex.leader = p.id;
                 p.leaderHexId = toHexId;
             }
@@ -767,9 +920,9 @@ class GameEngine {
             if (enemyClans.length > 0) {
                 p.combatsThisTurn += 1;
                 toHex.attacker = p.id;
-                this.addLog(`⚔️ ¡Disputa territorial en Hex #${toHexId}! ${p.short} desafía a ${enemyClans.map(c => CLANS[c]?.short || c).join(', ')}. Se resolverá en la Fase de Combates.`, 'combat');
+                this.addLog(`⚔️ ¡Disputa territorial en Hex #${toHexId}! ${p.short} ${isMovingLeader ? '(Daimyō al mando) ' : ''}desafía a ${enemyClans.map(c => CLANS[c]?.short || c).join(', ')}. Se resolverá en la Fase de Combates.`, 'combat');
             } else {
-                this.addLog(`${p.short} mueve una tropa de Hex #${fromHexId} a Hex #${toHexId}. (Movimientos restantes: ${this.movesLeft})`, 'action');
+                this.addLog(`${p.short} mueve ${isMovingLeader ? 'a su Daimyō' : 'un Ashigaru'} de Hex #${fromHexId} a Hex #${toHexId}. (Movimientos restantes: ${this.movesLeft})`, 'action');
             }
         }
 
@@ -882,11 +1035,15 @@ class GameEngine {
         let adjacentSupportHexes = 0;
         for (let nId of combatHex.neighbors) {
             const nh = this.hexMap.get(nId);
-            if (nh && nh.id !== combatHexId && (nh.troops && (nh.troops[clanId] || 0) > 0)) {
-                adjacentSupportHexes++;
+            if (nh && nh.id !== combatHexId) {
+                const friendlyTroops = (nh.troops && (nh.troops[clanId] || 0) > 0);
+                const friendlyGarrison = (nh.garrison === clanId);
+                if (friendlyTroops || friendlyGarrison) {
+                    adjacentSupportHexes++;
+                }
             }
         }
-        return adjacentSupportHexes >= 2 ? 1 : 0;
+        return adjacentSupportHexes >= 1 ? 1 : 0;
     }
 
     getValidRetreatHex(combatHexId, clanId) {
@@ -1112,22 +1269,6 @@ class GameEngine {
         let spendBannerA = (mitigationChoices.spendBannerA && pA && pA.banners >= 1);
         let spendBannerB = (mitigationChoices.spendBannerB && pB && pB.banners >= 1);
 
-        if (pA?.isAi && !spendBannerA && pA.banners >= 1) {
-            if (this.finalRoundTriggered && clanB === this.coronationCandidateId && optB?.hasLeader && (optA.baseLoss >= 0)) {
-                spendBannerA = true;
-            } else if (optB?.hasLeader && pA.banners >= 2) {
-                spendBannerA = true;
-            }
-        }
-
-        if (pB?.isAi && !spendBannerB && pB.banners >= 1) {
-            if (this.finalRoundTriggered && clanA === this.coronationCandidateId && optA?.hasLeader && (optB.baseLoss >= 0)) {
-                spendBannerB = true;
-            } else if (optA?.hasLeader && pB.banners >= 2) {
-                spendBannerB = true;
-            }
-        }
-
         const summary = {
             hexId: hex.id,
             clanA,
@@ -1145,6 +1286,8 @@ class GameEngine {
             baseLossB: optB?.baseLoss || 0,
             garrisonSaveA: false,
             garrisonSaveB: false,
+            bannerSaveA: false,
+            bannerSaveB: false,
             finalLossA: 0,
             finalLossB: 0,
             savedToHandA: 0,
@@ -1156,18 +1299,43 @@ class GameEngine {
         let lossA = summary.baseLossA;
         let lossB = summary.baseLossB;
 
-        // Empeño de Estandartes (Grito de Guerra / Último Aliento)
-        if (spendBannerA) {
-            pA.banners -= 1;
-            lossB += 1;
-            this.telemetry.bannersSpentWarCry = (this.telemetry.bannersSpentWarCry || 0) + 1;
-            this.addLog(`🚩 [GRITO DE GUERRA] ${pA.short} gasta 1 Estandarte para infligir +1 baja adicional a las fuerzas de ${pB.short}.`, 'feat');
+        // IA táctica de sacrificio de Estandartes para salvar tropas o salvar al Daimyō
+        if (pA?.isAi && !spendBannerA && pA.banners >= 1 && lossA > 0) {
+            if (optA?.hasLeader && lossA >= countA) {
+                spendBannerA = true;
+            } else if (this.finalRoundTriggered && clanA === this.coronationCandidateId) {
+                spendBannerA = true;
+            } else if (pA.banners >= 2 && lossA > 0) {
+                spendBannerA = true;
+            }
         }
-        if (spendBannerB) {
-            pB.banners -= 1;
-            lossA += 1;
+
+        if (pB?.isAi && !spendBannerB && pB.banners >= 1 && lossB > 0) {
+            if (optB?.hasLeader && lossB >= countB) {
+                spendBannerB = true;
+            } else if (this.finalRoundTriggered && clanB === this.coronationCandidateId) {
+                spendBannerB = true;
+            } else if (pB.banners >= 2 && lossB > 0) {
+                spendBannerB = true;
+            }
+        }
+
+        // Sacrificio defensivo de Estandartes: evita 1 baja propia en lugar de infligir daño
+        if (spendBannerA && lossA > 0) {
+            pA.banners -= 1;
+            lossA -= 1;
+            summary.bannerSaveA = true;
+            this.telemetry.bannersSpentDefense = (this.telemetry.bannersSpentDefense || 0) + 1;
             this.telemetry.bannersSpentWarCry = (this.telemetry.bannersSpentWarCry || 0) + 1;
-            this.addLog(`🚩 [GRITO DE GUERRA] ${pB.short} gasta 1 Estandarte para infligir +1 baja adicional a las fuerzas de ${pA.short}.`, 'feat');
+            this.addLog(`🚩 [SACRIFICIO DE ESTANDARTE] ${pA.short} sacrifica 1 Estandarte para evitar 1 baja propia en este combate (Bajas restantes: ${lossA}).`, 'feat');
+        }
+        if (spendBannerB && lossB > 0) {
+            pB.banners -= 1;
+            lossB -= 1;
+            summary.bannerSaveB = true;
+            this.telemetry.bannersSpentDefense = (this.telemetry.bannersSpentDefense || 0) + 1;
+            this.telemetry.bannersSpentWarCry = (this.telemetry.bannersSpentWarCry || 0) + 1;
+            this.addLog(`🚩 [SACRIFICIO DE ESTANDARTE] ${pB.short} sacrifica 1 Estandarte para evitar 1 baja propia en este combate (Bajas restantes: ${lossB}).`, 'feat');
         }
 
         // Mitigaciones por Guarnición

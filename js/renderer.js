@@ -616,6 +616,166 @@ class BoardRenderer {
         ctx.fillText(label, x, y);
     }
 
+    renderCombatSnapshot(targetCanvas, combatHexId) {
+        if (!targetCanvas || !this.engine) return;
+        const cHex = this.engine.hexMap.get(combatHexId);
+        if (!cHex) return;
+
+        const ctx = targetCanvas.getContext('2d');
+        const w = targetCanvas.width;
+        const h = targetCanvas.height;
+
+        // Limpiar fondo con tonalidad pergamino táctico
+        ctx.fillStyle = '#f5ebcf';
+        ctx.fillRect(0, 0, w, h);
+
+        const neighbors = (cHex.neighbors || []).map(nId => this.engine.hexMap.get(nId)).filter(Boolean);
+        const combatClans = Object.keys(cHex.troops || {}).filter(c => (cHex.troops[c] || 0) > 0);
+
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        const snapshotScale = 0.88;
+        ctx.scale(snapshotScale, snapshotScale);
+        ctx.translate(-cHex.x, -cHex.y);
+
+        // 1. Dibujar imagen del tablero base como fondo recortado
+        if (this.images.board && this.images.board.complete) {
+            ctx.save();
+            ctx.drawImage(this.images.board, 0, 0, 1234, 1014);
+            ctx.restore();
+        }
+
+        const allHexes = [cHex, ...neighbors];
+
+        // 2. Dibujar hexágonos y marcas tácticas
+        allHexes.forEach(hex => {
+            const verts = this.getHexVertices(hex.x, hex.y);
+            ctx.beginPath();
+            ctx.moveTo(verts[0].x, verts[0].y);
+            for (let i = 1; i < 6; i++) {
+                ctx.lineTo(verts[i].x, verts[i].y);
+            }
+            ctx.closePath();
+
+            const isCombatHex = (hex.id === combatHexId);
+            let hasFlankingTroops = false;
+            let hasGarrisonSupport = false;
+
+            if (!isCombatHex) {
+                combatClans.forEach(clanId => {
+                    if (hex.troops && (hex.troops[clanId] || 0) > 0) hasFlankingTroops = true;
+                    if (hex.garrison === clanId) hasGarrisonSupport = true;
+                });
+            }
+
+            if (isCombatHex) {
+                ctx.fillStyle = 'rgba(231, 76, 60, 0.42)';
+                ctx.fill();
+                ctx.strokeStyle = '#c0392b';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            } else if (hasFlankingTroops || hasGarrisonSupport) {
+                ctx.fillStyle = hasFlankingTroops ? 'rgba(46, 204, 113, 0.32)' : 'rgba(52, 152, 219, 0.32)';
+                ctx.fill();
+                ctx.strokeStyle = hasFlankingTroops ? '#27ae60' : '#2980b9';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = 'rgba(240, 230, 210, 0.65)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(160, 130, 90, 0.5)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
+            // Puntos de Interés
+            if (hex.type === 'torii' && this.images.torii && this.images.torii.complete) {
+                ctx.drawImage(this.images.torii, hex.x - 18, hex.y - 20, 36, 36);
+            } else if (hex.type === 'aldea' && this.images.aldea && this.images.aldea.complete) {
+                ctx.drawImage(this.images.aldea, hex.x - 20, hex.y - 20, 40, 40);
+            }
+
+            // Shiro (Castillo)
+            if (hex.shiro) {
+                const clan = CLANS[hex.shiro] || { color: '#c52828' };
+                ctx.fillStyle = clan.color;
+                ctx.beginPath();
+                ctx.arc(hex.x, hex.y, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.font = '14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🏯', hex.x, hex.y);
+
+                if (hex.garrison) {
+                    ctx.fillStyle = '#2980b9';
+                    ctx.beginPath();
+                    ctx.arc(hex.x + 14, hex.y - 12, 9, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillText('🛡️', hex.x + 14, hex.y - 12);
+                }
+            }
+
+            // Tropas presentes
+            if (hex.troops) {
+                const troopClans = Object.keys(hex.troops).filter(c => (hex.troops[c] || 0) > 0);
+                troopClans.forEach((clanId, idx) => {
+                    const count = hex.troops[clanId];
+                    const clan = CLANS[clanId] || { color: '#888', text: '#fff' };
+                    const ox = (troopClans.length > 1) ? (idx === 0 ? -12 : 12) : 0;
+                    const oy = (hex.shiro ? 14 : 0);
+
+                    ctx.fillStyle = clan.color;
+                    ctx.beginPath();
+                    ctx.arc(hex.x + ox, hex.y + oy, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    ctx.fillStyle = clan.text || '#fff';
+                    ctx.font = 'bold 11px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(count, hex.x + ox, hex.y + oy);
+
+                    if (hex.leader === clanId) {
+                        ctx.fillText('👑', hex.x + ox, hex.y + oy - 16);
+                    }
+                });
+            }
+
+            // Indicadores tácticos
+            if (isCombatHex) {
+                ctx.font = 'bold 18px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⚔️', hex.x, hex.y - 24);
+            } else if (hasFlankingTroops) {
+                ctx.fillStyle = '#145a32';
+                ctx.font = 'bold 9px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('⚔️ +1 Flanco', hex.x, hex.y + 28);
+            } else if (hasGarrisonSupport) {
+                ctx.fillStyle = '#1b4f72';
+                ctx.font = 'bold 9px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('🛡️ Guarnición', hex.x, hex.y + 28);
+            }
+
+            // ID de Hexágono
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.font = '9px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('#' + hex.id, hex.x, hex.y - (isCombatHex ? 36 : 22));
+        });
+
+        ctx.restore();
+    }
+
     resetView() {
         this.scale = 0.85;
         this.panX = 80;

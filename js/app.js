@@ -119,6 +119,32 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI();
     });
 
+    // Botón de Deshacer Acción (Undo)
+    const btnUndoAction = document.getElementById('btnUndoAction');
+    if (btnUndoAction) {
+        btnUndoAction.addEventListener('click', () => {
+            currentAction = null;
+            selectedUnitHexId = null;
+            renderer.clearHighlights();
+            engine.undoLastAction();
+            updateUI();
+        });
+    }
+
+    // Atajo global de teclado para Deshacer (Ctrl+Z o Cmd+Z)
+    window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            if (engine.canUndo()) {
+                currentAction = null;
+                selectedUnitHexId = null;
+                renderer.clearHighlights();
+                engine.undoLastAction();
+                updateUI();
+            }
+        }
+    });
+
     const btnCloseCombatCard = document.getElementById('btnCloseCombatCard');
     if (btnCloseCombatCard) {
         btnCloseCombatCard.addEventListener('click', () => {
@@ -263,6 +289,44 @@ document.addEventListener('DOMContentLoaded', () => {
         runMassSimulation(50);
     });
 
+    // 4.4 Modal de Elección de Unidad a Mover (Daimyō vs Ashigaru)
+    function showUnitChoiceModal(fromHexId, toHexId, callback) {
+        const modal = document.getElementById('unitChoiceModal');
+        const desc = document.getElementById('unitChoiceDesc');
+        const btnLeader = document.getElementById('btnChooseLeader');
+        const btnAshigaru = document.getElementById('btnChooseAshigaru');
+        const btnCancel = document.getElementById('btnCancelUnitChoice');
+        if (!modal) {
+            callback(true);
+            return;
+        }
+
+        desc.innerHTML = `Tienes tropas agrupadas junto a tu Daimyō en Hex #${fromHexId}.<br>¿Deseas avanzar a tu <b>👑 Daimyō (+2 Poder en Combates)</b> o a un <b>⚔️ Ashigaru (+1 Poder)</b> hacia Hex #${toHexId}?`;
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            btnLeader.onclick = null;
+            btnAshigaru.onclick = null;
+            btnCancel.onclick = null;
+        };
+
+        btnLeader.onclick = () => {
+            cleanup();
+            callback(true);
+        };
+
+        btnAshigaru.onclick = () => {
+            cleanup();
+            callback(false);
+        };
+
+        btnCancel.onclick = () => {
+            cleanup();
+        };
+
+        modal.style.display = 'flex';
+    }
+
     // 4.5 Modal de Reacciones Opcionales de Combate (Regla v1.4)
     let currentCombatPromptCallback = null;
 
@@ -272,6 +336,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const hexIdEl = document.getElementById('reactionHexId');
         const descEl = document.getElementById('reactionCombatDesc');
         const container = document.getElementById('reactionOptionsContainer');
+        const miniCanvas = document.getElementById('combatMiniCanvas');
+        const btnMinimize = document.getElementById('btnMinimizeReactionModal');
+        const pill = document.getElementById('minimizedCombatPill');
+        const pillHexId = document.getElementById('minimizedCombatHexId');
+        const btnRestore = document.getElementById('btnRestoreReactionModal');
+
         if (!modal || !container) {
             callback({});
             return;
@@ -280,6 +350,28 @@ document.addEventListener('DOMContentLoaded', () => {
         hexIdEl.innerText = hex.id;
         renderer.setSelectedHex(hex.id);
 
+        // Renderizar snapshot táctico del hexágono y sus vecinos en el canvas miniatura
+        if (miniCanvas) {
+            renderer.renderCombatSnapshot(miniCanvas, hex.id);
+        }
+
+        // Control de minimizar / restaurar modal para poder ver todo el tablero
+        if (btnMinimize) {
+            btnMinimize.onclick = () => {
+                modal.style.display = 'none';
+                if (pill) {
+                    pill.style.display = 'flex';
+                    if (pillHexId) pillHexId.innerText = hex.id;
+                }
+            };
+        }
+        if (btnRestore) {
+            btnRestore.onclick = () => {
+                if (pill) pill.style.display = 'none';
+                modal.style.display = 'flex';
+            };
+        }
+
         const clanA = CLANS[mitOptions.clanA];
         const clanB = CLANS[mitOptions.clanB];
         const optA = mitOptions.optA;
@@ -287,26 +379,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let ruleText = '';
         if (mitOptions.isTie) {
-            ruleText = `<b>⚖️ Choque Igualado (Fuerza ${optA.strength} vs ${optB.strength}):</b> Bajas mutuas completas de base (${optA.baseLoss} bajas para cada bando).`;
+            ruleText = `<b>⚖️ Choque Igualado (Poder de Combate ${optA.strength} vs ${optB.strength}):</b> Bajas mutuas completas de base (${optA.baseLoss} bajas para cada bando).`;
         } else {
             const majOpt = optA.strength > optB.strength ? optA : optB;
             const minOpt = optA.strength > optB.strength ? optB : optA;
-            ruleText = `<b>👑 Mayoría vs Minoría (Fuerza ${majOpt.strength} vs ${minOpt.strength}):</b> Mayoría (${majOpt.name} - ${majOpt.initial}) sufre <b>${majOpt.baseLoss} baja(s)</b> (${minOpt.count} - 1). Minoría (${minOpt.name} - ${minOpt.initial}) sufre <b>${minOpt.baseLoss} baja(s)</b>.`;
+            ruleText = `<b>👑 Mayoría vs Minoría (Poder de Combate ${majOpt.strength} vs ${minOpt.strength}):</b> Mayoría (${majOpt.name} - ${majOpt.initial}) sufre <b>${majOpt.baseLoss} baja(s)</b> (${minOpt.count} - 1). Minoría (${minOpt.name} - ${minOpt.initial}) sufre <b>${minOpt.baseLoss} baja(s)</b>.`;
         }
 
         descEl.innerHTML = `
             <div style="font-weight:bold; margin-bottom:4px; font-size:0.9rem;">
                 ⚔️ Disputa en Hex #${hex.id}: 
-                <span style="color:${clanA?.color}">${clanA?.short} (Fuerza ${optA.strength})</span> vs 
-                <span style="color:${clanB?.color}">${clanB?.short} (Fuerza ${optB.strength})</span>
+                <span style="color:${clanA?.color}">${clanA?.short} (Poder ${optA.strength})</span> vs 
+                <span style="color:${clanB?.color}">${clanB?.short} (Poder ${optB.strength})</span>
             </div>
             <div style="font-size:0.76rem; background:#fff8eb; padding:4px 8px; border-radius:4px; margin-bottom:4px; border:1px solid #ebd5c8;">
-                ${clanA?.short}: ${optA.count} tropas ${optA.hasLeader ? '+ 👑 Daimyō (+1)' : ''} ${optA.hasFlanking ? '+ ⚔️ Flanqueo (+1)' : ''} = <b>Fuerza ${optA.strength}</b> | 
-                ${clanB?.short}: ${optB.count} tropas ${optB.hasLeader ? '+ 👑 Daimyō (+1)' : ''} ${optB.hasFlanking ? '+ ⚔️ Flanqueo (+1)' : ''} = <b>Fuerza ${optB.strength}</b>
+                ${clanA?.short}: ${optA.count} tropas ${optA.hasLeader ? '+ 👑 Daimyō (+1)' : ''} ${optA.hasFlanking ? '+ ⚔️ Flanqueo (+1)' : ''} = <b>Poder de Combate ${optA.strength}</b> | 
+                ${clanB?.short}: ${optB.count} tropas ${optB.hasLeader ? '+ 👑 Daimyō (+1)' : ''} ${optB.hasFlanking ? '+ ⚔️ Flanqueo (+1)' : ''} = <b>Poder de Combate ${optB.strength}</b>
             </div>
             <div>${ruleText}</div>
             <div style="margin-top:4px; font-size:0.77rem; color:#554433;">
-                <em>Las tácticas y reacciones son <b>opcionales</b>. Puedes activar Guarnición, Retirarte con Honor para salvar tropas, o Empeñar Estandartes para aumentar bajas enemigas.</em>
+                <em>Las tácticas y reacciones son <b>opcionales</b>. Puedes activar Guarnición, Retirarte con Honor para salvar tropas, o Sacrificar Estandartes para evitar bajas propias.</em>
             </div>
         `;
 
@@ -321,21 +413,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 card.innerHTML = `
                     <div class="reaction-card-header" style="color:${opt.color};">
                         <span>🛡️ Opciones tácticas para ${opt.name} (${opt.initial})</span>
-                        <span style="font-size:0.74rem; font-weight:normal; color:#555;">Fuerza: <b>${opt.strength}</b> | Bajas base: <b>${opt.baseLoss}</b></span>
+                        <span style="font-size:0.74rem; font-weight:normal; color:#555;">Poder de Combate: <b>${opt.strength}</b> | Bajas base: <b>${opt.baseLoss}</b></span>
                     </div>
                 `;
 
                 if (opt.hasLeader) {
                     const lRow = document.createElement('div');
                     lRow.style.cssText = 'font-size:0.73rem; background:#fef9e7; border-left:3px solid #f1c40f; padding:4px 6px; border-radius:3px; color:#665511;';
-                    lRow.innerHTML = '👑 <b>Daimyō al mando (+1 Fuerza militar):</b> Si las tropas de este hexágono son aniquiladas, el rival se lleva +1 Estandarte adicional y el Daimyō reaparecerá en tu Capital la próxima ronda.';
+                    lRow.innerHTML = '👑 <b>Daimyō al mando (+1 Poder de Combate):</b> Aporta +2 en total (1 tropa física + 1 bono). Si las tropas de este hexágono son aniquiladas, el rival se lleva +1 Estandarte adicional y el Daimyō reaparecerá en tu Capital.';
                     card.appendChild(lRow);
                 }
 
                 if (opt.hasFlanking) {
                     const fRow = document.createElement('div');
                     fRow.style.cssText = 'font-size:0.73rem; background:#eafaf1; border-left:3px solid #2ecc71; padding:4px 6px; border-radius:3px; color:#145a32;';
-                    fRow.innerHTML = '⚔️ <b>Flanqueo Posicional Activo (+1 Fuerza militar):</b> Tropas aliadas en hexágonos vecinos rodean la posición enemiga.';
+                    fRow.innerHTML = '⚔️ <b>Apoyo por Flanqueo (+1 Poder de Combate):</b> Tropas o guarnición aliada en casillas adyacentes proporcionan soporte táctico al combate.';
                     card.appendChild(fRow);
                 }
 
@@ -373,8 +465,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     bRow.innerHTML = `
                         <input type="checkbox" id="chkSpendBanner${prefix}">
                         <div>
-                            <b style="color:#c0392b;">🚩 Empeñar 1 Estandarte ("Grito de Guerra / Último Aliento")</b>
-                            <div style="font-size:0.72rem; color:#664444;">Gastas 1 de tus ${opt.banners} Estandartes para infligir +1 baja adicional inmediata al rival.</div>
+                            <b style="color:#c0392b;">🚩 Sacrificar 1 Estandarte (Disponibles: ${opt.banners})</b>
+                            <div style="font-size:0.72rem; color:#664444;">Gastas 1 Estandarte de honor para evitar 1 baja propia en este combate (salva a tu Daimyō o a tus tropas).</div>
                         </div>
                     `;
                     card.appendChild(bRow);
@@ -392,6 +484,8 @@ document.addEventListener('DOMContentLoaded', () => {
         btnConfirmReactions.addEventListener('click', () => {
             const modal = document.getElementById('reactionModal');
             if (modal) modal.style.display = 'none';
+            const pill = document.getElementById('minimizedCombatPill');
+            if (pill) pill.style.display = 'none';
 
             const chkGarrisonA = document.getElementById('chkGarrisonA');
             const chkGarrisonB = document.getElementById('chkGarrisonB');
@@ -422,6 +516,8 @@ document.addEventListener('DOMContentLoaded', () => {
         btnSkipReactions.addEventListener('click', () => {
             const modal = document.getElementById('reactionModal');
             if (modal) modal.style.display = 'none';
+            const pill = document.getElementById('minimizedCombatPill');
+            if (pill) pill.style.display = 'none';
 
             const choices = {
                 useGarrisonA: false,
@@ -520,12 +616,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     const validDests = engine.getValidMoveDestinations(selectedUnitHexId, p.id);
                     if (validDests.includes(gameHex.id)) {
-                        // ¡Mover tropa! Permite apilarse con aliadas (hasta 3) y asaltar defensas enemigas de 3 unidades
-                        if (engine.moveTroop(selectedUnitHexId, gameHex.id)) {
-                            selectedUnitHexId = null;
-                            renderer.setSelectedHex(null);
-                            renderer.clearHighlights();
-                            updateUI();
+                        const fromHex = engine.hexMap.get(selectedUnitHexId);
+                        const toHex = engine.hexMap.get(gameHex.id);
+                        const hasLeaderAndTroops = (fromHex && fromHex.leader === p.id && (fromHex.troops[p.id] || 0) > 1);
+
+                        // Si hay apilamiento de Daimyō y tropa regular, y el destino NO es castillo propio (donde solo va guarnición):
+                        if (hasLeaderAndTroops && toHex && toHex.shiro !== p.id) {
+                            showUnitChoiceModal(selectedUnitHexId, gameHex.id, (moveLeader) => {
+                                if (engine.moveTroop(selectedUnitHexId, gameHex.id, moveLeader)) {
+                                    selectedUnitHexId = null;
+                                    renderer.setSelectedHex(null);
+                                    renderer.clearHighlights();
+                                    updateUI();
+                                }
+                            });
+                        } else {
+                            // ¡Mover tropa! Permite apilarse con aliadas (hasta 3) y asaltar defensas enemigas de 3 unidades
+                            if (engine.moveTroop(selectedUnitHexId, gameHex.id)) {
+                                selectedUnitHexId = null;
+                                renderer.setSelectedHex(null);
+                                renderer.clearHighlights();
+                                updateUI();
+                            }
                         }
                     } else if (hasMyTroops) {
                         // Si no es un destino válido pero tiene tropas propias, cambiar selección
@@ -705,6 +817,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btnResolve.disabled = (!isNormalGame || pendingCombats.length === 0);
         document.getElementById('btnPassTurn').disabled = (!isNormalGame);
 
+        const btnUndo = document.getElementById('btnUndoAction');
+        if (btnUndo) {
+            btnUndo.disabled = !engine.canUndo();
+        }
+
         // Actualizar Hazañas
         renderFeatsList();
 
@@ -819,8 +936,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const mitigations = [];
         if (s.garrisonSaveA) mitigations.push(`<span style="background:#27ae60; color:#fff; padding:1px 5px; border-radius:3px;">🛡️ Guarnición aliada evitó 1 baja para ${s.pA?.short}</span>`);
+        if (s.bannerSaveA) mitigations.push(`<span style="background:#c0392b; color:#fff; padding:1px 5px; border-radius:3px;">🚩 Sacrificio de Estandarte evitó 1 baja para ${s.pA?.short}</span>`);
         if (s.toriiSaveA) mitigations.push(`<span style="background:#8e44ad; color:#fff; padding:1px 5px; border-radius:3px;">⛩️ Bendición del Torii evitó 1 baja para ${s.pA?.short}</span>`);
         if (s.garrisonSaveB) mitigations.push(`<span style="background:#27ae60; color:#fff; padding:1px 5px; border-radius:3px;">🛡️ Guarnición aliada evitó 1 baja para ${s.pB?.short}</span>`);
+        if (s.bannerSaveB) mitigations.push(`<span style="background:#c0392b; color:#fff; padding:1px 5px; border-radius:3px;">🚩 Sacrificio de Estandarte evitó 1 baja para ${s.pB?.short}</span>`);
         if (s.toriiSaveB) mitigations.push(`<span style="background:#8e44ad; color:#fff; padding:1px 5px; border-radius:3px;">⛩️ Bendición del Torii evitó 1 baja para ${s.pB?.short}</span>`);
 
         let mitigationsHtml = '';
@@ -837,7 +956,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         content.innerHTML = `
             <div style="font-weight:bold; margin-bottom:4px; color:#111;">
-                ⚔️ Hex #${s.hexId}: <span style="color:${colorA}">${nameA} (${s.countA})</span> vs <span style="color:${colorB}">${nameB} (${s.countB})</span>
+                ⚔️ Hex #${s.hexId}: <span style="color:${colorA}">${nameA} (Poder ${s.strA || s.countA})</span> vs <span style="color:${colorB}">${nameB} (Poder ${s.strB || s.countB})</span>
             </div>
             <div style="margin-bottom:4px; background:#fcf8e3; padding:4px; border-radius:3px; font-size:0.75rem;">
                 ${ruleExplanation}
