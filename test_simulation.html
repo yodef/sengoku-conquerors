@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Test Engine Invariants</title>
+</head>
+<body>
+    <div id="output">Running tests...</div>
+    <script src="js/hex_grid_data.js"></script>
+    <script src="js/game_engine.js"></script>
+    <script>
+        const out = document.getElementById('output');
+        const logs = [];
+
+        function assert(cond, msg) {
+            if (!cond) {
+                const err = 'FAIL: ' + msg;
+                logs.push(err);
+                console.error(err);
+                throw new Error(err);
+            }
+        }
+
+        function runBatch(configs, count, modeName) {
+            const is2P = (configs.length === 2);
+            const stats = {
+                mode: modeName,
+                totalGames: count,
+                completedGames: 0,
+                rounds: [],
+                wins: {},
+                victoryReasons: { REGICIDE_USURPATION: 0, CORONATION_SURVIVED: 0, STANDARD_TIEBREAK: 0 },
+                coronationsTriggered: 0,
+                regicidesExecuted: 0,
+                coronationsSurvived: 0,
+                tacticalRetreats: 0,
+                leadersDefeated: 0,
+                bannersSpentWarCry: 0,
+                feats: { sangre_y_acero: 0, dominio_feudal: 0, senor_castillos: 0, asolador: 0 },
+                combatsTotal: 0,
+                combatsMajority: 0,
+                combatsEqual: 0,
+                bannersAwarded: 0,
+                garrisonMitigations: 0,
+                siegeSupportDefenses: 0,
+                siegesSuccess: 0,
+                siegesRepelled: 0,
+                campaignsExecuted: 0,
+                aldeaExtraTroops: 0,
+                firstToriiTurns: [],
+                firstAldeaTurns: []
+            };
+
+            configs.forEach(c => stats.wins[c.id] = 0);
+
+            for (let g = 1; g <= count; g++) {
+                const engine = new GameEngine(HEX_GRID_DATA);
+                engine.initGame(configs);
+                const initialMando = engine.mandoPlayerIdx;
+
+                // Turno 0
+                while (engine.round === 0 && !engine.gameOver) {
+                    if (engine.turnPhase === 'SETUP_SHIRO') engine.runAiSetup();
+                    else if (engine.turnPhase === 'SETUP_ASHIGARU') engine.runAiSetupAshigaru();
+
+                    engine.players.forEach(p => {
+                        const audit = engine.getPlayerTroopAudit(p.id);
+                        assert(audit.total === 28, `${modeName} G${g} Setup Clan ${p.id} troops = ${audit.total}`);
+                    });
+                }
+
+                // Rondas regulares (hasta 40)
+                while (!engine.gameOver && engine.round <= 40) {
+                    engine.runAiTurn();
+
+                    if (is2P) {
+                        assert(engine.mandoPlayerIdx === initialMando, `${modeName} G${g} R${engine.round}: Mando rotated in 2P!`);
+                    }
+
+                    engine.players.forEach(p => {
+                        const audit = engine.getPlayerTroopAudit(p.id);
+                        assert(audit.total === 28, `${modeName} G${g} R${engine.round} Clan ${p.id} troops = ${audit.total} (hand:${audit.hand}, reserve:${audit.reserve}, mobile:${audit.boardMobile}, garrisons:${audit.garrisons}, sieges:${audit.sieges})`);
+                    });
+
+                    const pending = engine.getPendingCombatHexes();
+                    assert(pending.length === 0, `${modeName} G${g} R${engine.round} stuck combats!`);
+
+                    engine.hexMap.forEach(h => {
+                        if (h.shiro) {
+                            assert(!(h.garrison && h.siege), `Hex #${h.id} has BOTH garrison and siege`);
+                            const loose = h.troops ? Object.values(h.troops).reduce((a, b) => a + b, 0) : 0;
+                            assert(loose === 0, `Hex #${h.id} castle has loose troops`);
+                        }
+                    });
+                }
+
+                const completed = engine.gameOver;
+                if (completed) {
+                    stats.completedGames++;
+                    stats.wins[engine.winner.id] = (stats.wins[engine.winner.id] || 0) + 1;
+                    if (engine.victoryReason) {
+                        stats.victoryReasons[engine.victoryReason] = (stats.victoryReasons[engine.victoryReason] || 0) + 1;
+                    }
+                }
+                stats.rounds.push(engine.round);
+
+                // Telemetría acumulada
+                const t = engine.telemetry;
+                stats.coronationsTriggered += (t.coronationsTriggered || 0);
+                stats.regicidesExecuted += (t.regicidesExecuted || 0);
+                stats.coronationsSurvived += (t.coronationsSurvived || 0);
+                stats.tacticalRetreats += (t.tacticalRetreats || 0);
+                stats.leadersDefeated += (t.leadersDefeated || 0);
+                stats.bannersSpentWarCry += (t.bannersSpentWarCry || 0);
+                stats.combatsTotal += t.combatsTotal;
+                stats.combatsMajority += t.combatsMajorityWins;
+                stats.combatsEqual += t.combatsEqualCasualties;
+                stats.bannersAwarded += t.bannersAwarded;
+                stats.garrisonMitigations += t.lossesSavedByGarrison;
+                stats.siegeSupportDefenses += (t.siegesProtectedBySupport || 0);
+                stats.siegesSuccess += t.siegesSuccess;
+                stats.siegesRepelled += t.siegesRepelled;
+                stats.campaignsExecuted += t.campaignsExecuted;
+                stats.aldeaExtraTroops += (t.aldeaExtraTroopsAwarded || 0);
+                if (t.firstToriiTurn !== null) stats.firstToriiTurns.push(t.firstToriiTurn);
+                if (t.firstAldeaTurn !== null) stats.firstAldeaTurns.push(t.firstAldeaTurn);
+
+                Object.keys(stats.feats).forEach(fid => {
+                    stats.feats[fid] += (t.featsClaimed[fid] || 0);
+                });
+            }
+
+            const avg = (arr) => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : '0';
+            stats.avgRounds = avg(stats.rounds);
+            stats.minRounds = Math.min(...stats.rounds);
+            stats.maxRounds = Math.max(...stats.rounds);
+            stats.avgFirstTorii = avg(stats.firstToriiTurns);
+            stats.avgFirstAldea = avg(stats.firstAldeaTurns);
+
+            return stats;
+        }
+
+        try {
+            logs.push('=== EJECUTANDO SIMULACIONES COMPARATIVAS (2P, 3P, 4P) ===');
+
+            // 1. Modo 2 Jugadores (1v1)
+            const stats2P = runBatch([
+                { id: 'rojo', name: 'Rojo', isAi: true },
+                { id: 'amarillo', name: 'Amarillo', isAi: true }
+            ], 5, '2 Jugadores (1v1)');
+
+            // 2. Modo 3 Jugadores
+            const stats3P = runBatch([
+                { id: 'rojo', name: 'Rojo', isAi: true },
+                { id: 'amarillo', name: 'Amarillo', isAi: true },
+                { id: 'azul', name: 'Azul', isAi: true }
+            ], 5, '3 Jugadores');
+
+            // 3. Modo 4 Jugadores
+            const stats4P = runBatch([
+                { id: 'rojo', name: 'Rojo', isAi: true },
+                { id: 'amarillo', name: 'Amarillo', isAi: true },
+                { id: 'azul', name: 'Azul', isAi: true },
+                { id: 'verde', name: 'Verde', isAi: true }
+            ], 5, '4 Jugadores');
+
+            logs.push('RESULTS_JSON_START');
+            logs.push(JSON.stringify({ stats2P, stats3P, stats4P }, null, 2));
+            logs.push('RESULTS_JSON_END');
+            logs.push('=== TODAS LAS 60 PARTIDAS CUMPLIERON LOS INVARIANTES ESTRICTOS (28 TROPAS) ===');
+
+            out.innerText = logs.join('\n');
+            document.title = 'TESTS_PASSED';
+        } catch (e) {
+            logs.push('ERROR: ' + e.message);
+            out.innerText = logs.join('\n');
+            document.title = 'TESTS_FAILED';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Temporary and test outputs
+test_output.txt
+scratch/
+temp_icons/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.DS_Store

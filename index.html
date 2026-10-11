@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sengoku Conquerors 1.4 - Simulador Táctico</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header>
+        <div class="brand">
+            <h1>⛩️ Sengoku Conquerors</h1>
+            <span class="version-tag">v1.4 Simulator</span>
+        </div>
+        <div class="top-controls">
+            <label style="font-size:0.75rem; color:#dfcaa0; display:flex; align-items:center; gap:4px; cursor:pointer; margin-right:4px;">
+                <input type="checkbox" id="chkAutoAi" checked> Auto-jugar Bots IA
+            </label>
+            <button id="btnOpenConfig" class="primary">⚙️ Configurar Clanes y Reglas</button>
+            <button id="btnOpenTelemetry" style="background: linear-gradient(180deg, #16a085 0%, #117864 100%);">📊 Telemetría de Reglas</button>
+            <button id="btnResetView">🎯 Centrar Tablero</button>
+            <button id="btnAiMove">🤖 Mover IA</button>
+            <button id="btnSimulateMatch">⚡ Simular Partida</button>
+            <button id="btnSimulate50">📊 Simular 50 Tests</button>
+        </div>
+    </header>
+
+    <!-- Marcador de Control de Turno y Mando (Ruleset.pdf v1.4) -->
+    <div id="turnControlBar" class="turn-control-bar">
+        <div class="turn-indicator">
+            <span class="turn-dot" id="turnDot"></span>
+            <span class="turn-label">TURNO ACTIVO:</span>
+            <b id="turnPlayerName" style="color: #e74c3c;">Jugador 1 (Rojo)</b>
+            <span class="phase-pill" id="turnPhaseBadge">PRE-RONDA (TURNO 0)</span>
+        </div>
+        <div class="mando-indicator" id="mandoBadgeContainer">
+            <span style="font-size:0.8rem; color:#ffd700;">👑 Ficha de Mando:</span>
+            <b id="mandoPlayerName" style="color:#fff;">Rojo</b>
+            <span style="font-size:0.75rem; color:#ccc;">(Primer Turno y Desempates)</span>
+        </div>
+    </div>
+
+    <!-- Banner de Ronda de Coronación y Regicidio -->
+    <div id="coronationBanner" class="coronation-banner" style="display:none;">
+        <div class="coronation-banner-content">
+            <span class="coronation-icon">👑⚔️</span>
+            <span id="coronationText"><b>RONDA DE CORONACIÓN:</b> ¡El Aspirante marcha hacia Kioto! ¡Los demás clanes deben aliarse para cometer REGICIDIO!</span>
+        </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="main-container">
+
+        <!-- Left Sidebar: Multi-player Scoreboard & Hex Inspector -->
+        <aside class="sidebar">
+            <div class="panel-card">
+                <h3>🎌 Clanes y Reservas</h3>
+                <div id="scoreboardList" class="scoreboard-list">
+                    <!-- Cards for each player populated by app.js -->
+                </div>
+            </div>
+
+            <div class="panel-card">
+                <h3>📜 Estado e Instrucciones</h3>
+                <div id="actionPrompt" class="prompt-bar">
+                    Cargando partida...
+                </div>
+            </div>
+
+            <!-- Panel Didáctico de Desglose de Combates (Regla 1.4) -->
+            <div class="panel-card" id="combatResolutionCard" style="display:none; border-left: 4px solid #c0392b; background:#fffcf9;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ebd5c8; padding-bottom:4px; margin-bottom:6px;">
+                    <h3 style="margin:0; color:#962d22; font-size:0.86rem; display:flex; align-items:center; gap:4px;">
+                        ⚔️ Desglose de Combate (Regla 1.4)
+                    </h3>
+                    <button id="btnCloseCombatCard" style="padding:1px 6px; font-size:0.7rem; background:#dfcaa0; color:#222; border:none; border-radius:3px; cursor:pointer;">✕</button>
+                </div>
+                <div id="combatResolutionContent" style="font-size:0.76rem; line-height:1.45;">
+                    <!-- Rellenado dinámicamente tras cada combate -->
+                </div>
+            </div>
+
+            <div class="panel-card">
+                <h3>🔍 Inspección de Casilla</h3>
+                <div id="hexInfoBox" style="font-size:0.8rem; line-height:1.4;">
+                    Pasa el cursor sobre un hexágono...
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Interactive Canvas -->
+        <main class="canvas-wrapper" id="canvasContainer">
+            <canvas id="boardCanvas"></canvas>
+            <div class="canvas-floating-controls">
+                <span style="color:#dfcaa0; font-size:0.75rem;">💡 Shift + Clic o Clic Central: Arrastrar | Rueda: Zoom</span>
+            </div>
+        </main>
+
+        <!-- Right Sidebar: Actions, Feats & Log -->
+        <aside class="sidebar right">
+            <div class="panel-card">
+                <h3>⚡ Control de Fases y Turno</h3>
+                <div class="action-buttons-group">
+                    <!-- Big Prominent Flow Transition Button -->
+                    <button id="btnNextPhase" class="primary flow-btn">🏹 Pasar a Fase de Maniobras</button>
+                    
+                    <button id="btnReinforce">➕ Refuerzos (Gasta 1 Ashigaru)</button>
+                    <button id="btnCampaign">🏯 Campaña (Funda Shiro - Gasta 2)</button>
+                    <button id="btnResolveCombats">⚔️ Resolver Combates</button>
+                    <button id="btnPassTurn" style="background:#4a3f35; color:#ddd;">⏩ Pasar Turno</button>
+                </div>
+            </div>
+
+            <div class="panel-card">
+                <h3>🏆 Hazañas del Shogun (3 para ganar)</h3>
+                <div id="featsTableContainer" style="overflow-x: auto; max-height: 310px; overflow-y: auto;">
+                    <table class="feats-matrix-table" id="featsMatrixTable">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;">Hazaña</th>
+                                <th class="clan-th" style="background:#c52828;" title="Clan Rojo (R)">R</th>
+                                <th class="clan-th" style="background:#237a3b;" title="Clan Verde (G)">G</th>
+                                <th class="clan-th" style="background:#1d5ea8;" title="Clan Azul (B)">B</th>
+                                <th class="clan-th" style="background:#e5b700; color:#111;" title="Clan Amarillo (Y)">Y</th>
+                            </tr>
+                        </thead>
+                        <tbody id="featsTableBody">
+                            <!-- Populated dynamically by app.js -->
+                        </tbody>
+                        <tfoot id="featsTableFoot">
+                            <!-- Summary row: Total hazañas por clan -->
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel-card" style="flex: 1; display:flex; flex-direction:column;">
+                <h3>📜 Bitácora de Partida</h3>
+                <div id="actionLogBox" class="log-box" style="flex:1;">
+                    <!-- Log entries -->
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- Modal: Configuración de Jugadores y Reglas -->
+    <div id="configModal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>⚙️ Configuración de Clanes y Reglamento</h2>
+            
+            <div style="font-size:0.85rem; color:#665544; margin-bottom:4px;">
+                Configura los participantes (2 a 4 Clanes) y ajusta las variables de juego para probar variantes:
+            </div>
+
+            <div class="modal-field">
+                <label for="cfgPlayerCount"><b>Número de Clanes en Partida:</b></label>
+                <select id="cfgPlayerCount">
+                    <option value="2">2 Clanes (Duelo 1v1 - Sin rotación de Mando)</option>
+                    <option value="3">3 Clanes</option>
+                    <option value="4" selected>4 Clanes (Recomendado - 4 Fortalezas)</option>
+                </select>
+            </div>
+
+            <!-- Player Slots Grid -->
+            <div class="player-config-grid" id="playerSlotsContainer">
+                <!-- Slot 1 -->
+                <div class="player-config-card" id="slot1">
+                    <div style="font-weight:bold; color:#111;">Clan 1 (Primer Turno / Mando)</div>
+                    <div class="modal-field">
+                        <label>Nombre:</label>
+                        <input type="text" id="p1Name" value="Jugador 1 (Rojo)">
+                    </div>
+                    <div class="modal-field">
+                        <label>Casa:</label>
+                        <select id="p1Clan">
+                            <option value="rojo" selected>Clan Rojo (Carmín)</option>
+                            <option value="amarillo">Clan Amarillo (Dorado)</option>
+                            <option value="azul">Clan Azul (Cobalto)</option>
+                            <option value="verde">Clan Verde (Esmeralda)</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label>Control:</label>
+                        <select id="p1Type">
+                            <option value="human" selected>Humano (Tú / Amigo)</option>
+                            <option value="ai">Bot IA</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Slot 2 -->
+                <div class="player-config-card" id="slot2">
+                    <div style="font-weight:bold; color:#111;">Clan 2</div>
+                    <div class="modal-field">
+                        <label>Nombre:</label>
+                        <input type="text" id="p2Name" value="Jugador 2 (Amarillo)">
+                    </div>
+                    <div class="modal-field">
+                        <label>Casa:</label>
+                        <select id="p2Clan">
+                            <option value="rojo">Clan Rojo (Carmín)</option>
+                            <option value="amarillo" selected>Clan Amarillo (Dorado)</option>
+                            <option value="azul">Clan Azul (Cobalto)</option>
+                            <option value="verde">Clan Verde (Esmeralda)</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label>Control:</label>
+                        <select id="p2Type">
+                            <option value="human">Humano (Tú / Amigo)</option>
+                            <option value="ai" selected>Bot IA</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Slot 3 -->
+                <div class="player-config-card" id="slot3">
+                    <div style="font-weight:bold; color:#111;">Clan 3</div>
+                    <div class="modal-field">
+                        <label>Nombre:</label>
+                        <input type="text" id="p3Name" value="Jugador 3 (Azul)">
+                    </div>
+                    <div class="modal-field">
+                        <label>Casa:</label>
+                        <select id="p3Clan">
+                            <option value="rojo">Clan Rojo (Carmín)</option>
+                            <option value="amarillo">Clan Amarillo (Dorado)</option>
+                            <option value="azul" selected>Clan Azul (Cobalto)</option>
+                            <option value="verde">Clan Verde (Esmeralda)</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label>Control:</label>
+                        <select id="p3Type">
+                            <option value="human">Humano (Tú / Amigo)</option>
+                            <option value="ai" selected>Bot IA</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Slot 4 -->
+                <div class="player-config-card" id="slot4" style="opacity:1;">
+                    <div style="font-weight:bold; color:#111;">Clan 4</div>
+                    <div class="modal-field">
+                        <label>Nombre:</label>
+                        <input type="text" id="p4Name" value="Jugador 4 (Verde)">
+                    </div>
+                    <div class="modal-field">
+                        <label>Casa:</label>
+                        <select id="p4Clan">
+                            <option value="rojo">Clan Rojo (Carmín)</option>
+                            <option value="amarillo">Clan Amarillo (Dorado)</option>
+                            <option value="azul">Clan Azul (Cobalto)</option>
+                            <option value="verde" selected>Clan Verde (Esmeralda)</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label>Control:</label>
+                        <select id="p4Type">
+                            <option value="human">Humano (Tú / Amigo)</option>
+                            <option value="ai" selected>Bot IA</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modificadores de Reglas para Pruebas -->
+            <div style="font-weight:bold; color:#3b3024; margin-top:6px; border-top:1px solid #d5c8ad; padding-top:8px;">
+                🛠️ Ajustes de Reglamento para Pruebas:
+            </div>
+            <div class="rules-config-grid">
+                <div class="modal-field">
+                    <label>Reclutamiento Base:</label>
+                    <input type="number" id="ruleDrawBase" value="3" min="1" max="10">
+                </div>
+                <div class="modal-field">
+                    <label>Bonus por Aldea (+1 Leva):</label>
+                    <input type="number" id="ruleAldeaBonus" value="1" min="0" max="5">
+                </div>
+                <div class="modal-field">
+                    <label>Coste de Campaña:</label>
+                    <input type="number" id="ruleCampaignCost" value="2" min="1" max="5">
+                </div>
+                <div class="modal-field">
+                    <label>Movimientos por Turno:</label>
+                    <input type="number" id="ruleMaxMoves" value="3" min="1" max="10">
+                </div>
+                <div class="modal-field">
+                    <label>Hazañas para Ganar:</label>
+                    <input type="number" id="ruleFeatsToWin" value="3" min="1" max="7">
+                </div>
+                <div class="modal-field">
+                    <label>Reserva de Tropas:</label>
+                    <input type="number" id="ruleReserveTroops" value="28" min="5" max="50">
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                <button onclick="document.getElementById('configModal').style.display='none'">Cerrar</button>
+                <button id="btnStartGameConfirm" class="primary">🎌 Iniciar Partida (Turno 0)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Dashboard de Telemetría de Reglas v1.4 -->
+    <div id="telemetryModal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 760px;">
+            <h2>📊 Dashboard de Telemetría y Balance (Reglamento v1.4)</h2>
+            <div style="font-size:0.85rem; color:#665544; margin-bottom:12px;">
+                Métricas en vivo para evaluar cómo se comportan las reglas físicas al ser interpretadas en simulación:
+            </div>
+
+            <div class="telemetry-grid">
+                <!-- Card 1: Combates y Mayorías -->
+                <div class="telemetry-card">
+                    <h4>⚔️ Combates y Mayorías</h4>
+                    <div class="telemetry-stat"><span class="t-label">Combates Totales:</span> <b id="statCombatsTotal">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Victorias Mayoría (B - 1):</span> <b id="statCombatsMajority">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Choques Paridad (Iguales):</span> <b id="statCombatsEqual">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Estandartes Ganados:</span> <b id="statBannersAwarded" style="color:#c52828;">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Mitigaciones Guarnición:</span> <b id="statGarrisonSaves" style="color:#27ae60;">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Soporte Asedio Defendido:</span> <b id="statSiegeSupports" style="color:#c0392b;">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">🏃 Retiradas con Honor:</span> <b id="statTacticalRetreats" style="color:#2980b9;">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">🚩 Gritos de Guerra:</span> <b id="statBannersSpentWarCry" style="color:#d35400;">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">⚔️ Combates con Flanqueo:</span> <b id="statFlankingCombats" style="color:#16a085;">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">👑 Daimyōs Caídos:</span> <b id="statLeadersDefeated" style="color:#e67e22;">0</b></div>
+                </div>
+
+                <!-- Card 2: Castillos y Asedios -->
+                <div class="telemetry-card">
+                    <h4>🏯 Fortalezas y Asedios</h4>
+                    <div class="telemetry-stat"><span class="t-label">Campañas Fundadas:</span> <b id="statCampaignsExecuted">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Castillos Activos en Mapa:</span> <b id="statActiveShiros">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Castillos Libres (Sin Asedio):</span> <b id="statUnbesiegedShiros">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Guarniciones Fijas:</span> <b id="statGarrisonsFormed">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Asedios Exitosos:</span> <b id="statSiegesSuccess">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Asedios Repelidos:</span> <b id="statSiegesRepelled" style="color:#27ae60;">0</b></div>
+                </div>
+
+                <!-- Card 3: Puntos de Interés y Maniobras -->
+                <div class="telemetry-card">
+                    <h4>🌾 Aldeas, Torii y Maniobras</h4>
+                    <div class="telemetry-stat"><span class="t-label">Levas Extra por Aldeas:</span> <b id="statAldeaExtraTroops" style="color:#d35400;">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">1ª Aldea Reclamada:</span> <b id="statFirstAldeaTurn">-</b></div>
+                    <div class="telemetry-stat"><span class="t-label">1er Torii Reclamado:</span> <b id="statFirstToriiTurn">-</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Refuerzos Desplegados:</span> <b id="statReinforcementsPlaced">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Movimientos Realizados:</span> <b id="statTotalMoves">0</b></div>
+                </div>
+
+                <!-- Card 4: Tablero de Hazañas (4 Oficiales) -->
+                <div class="telemetry-card">
+                    <h4>🏆 Progreso de 4 Hazañas</h4>
+                    <div class="telemetry-stat"><span class="t-label">⚔️ Sangre y Acero (5 Banners):</span> <b id="statFeatBanners">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">⛩️ Dominio Feudal (Torii+Aldea):</span> <b id="statFeatAldea">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">🏯 Señor de Castillos (5 Libres):</span> <b id="statFeatShiros">0</b></div>
+                    <div class="telemetry-stat"><span class="t-label">🔥 Asolador (1 Asedio Activo):</span> <b id="statFeatSiege">0</b></div>
+                </div>
+
+                <!-- Card 5: Dinámica del Mando y Fin de Partida -->
+                <div class="telemetry-card">
+                    <h4>👑 Mando y Ronda Final</h4>
+                    <div class="telemetry-stat"><span class="t-label">Poseedor del Mando:</span> <b id="statMandoHolder">-</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Ronda Final Activada:</span> <b id="statFinalRoundStatus">No</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Ronda de Activación:</span> <b id="statFinalRoundTurn">-</b></div>
+                    <div class="telemetry-stat"><span class="t-label">Desempates por Mando:</span> <b id="statMandoTiebreaks">0</b></div>
+                </div>
+
+                <!-- Card 6: Ley de Conservación -->
+                <div class="telemetry-card">
+                    <h4>🔒 Auditoría Estricta</h4>
+                    <div class="telemetry-stat"><span class="t-label">Conservación de Tropas:</span> <b style="color:#27ae60;">28 / 28 (100%)</b></div>
+                    <div class="telemetry-stat" style="font-size:0.75rem; color:#666; margin-top:4px;">
+                        <span>Mano + Reserva + Tablero (Móviles, Guarniciones y Asedios) es matemáticamente inviolable.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                <button onclick="document.getElementById('telemetryModal').style.display='none'">Cerrar Dashboard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Reacciones Opcionales de Combate (Regla v1.4) -->
+    <div id="reactionModal" class="modal-overlay" style="display:none; z-index:1000;">
+        <div class="modal-content" style="max-width: 530px; border: 2px solid #b89758; background: #fffcf9;">
+            <h2 style="color: #962d22; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+                ⚔️ Opciones de Reacción en Combate (Hex #<span id="reactionHexId">-</span>)
+            </h2>
+            <div id="reactionCombatDesc" style="font-size: 0.82rem; color: #4a3f35; line-height: 1.45; background: #fdf6e7; padding: 10px; border-radius: 5px; border-left: 4px solid #b89758;">
+                <!-- Desglose de fuerzas y bajas base -->
+            </div>
+
+            <div id="reactionOptionsContainer" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                <!-- Opciones interactivas con checkbox -->
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; border-top: 1px solid #ebd5c8; padding-top: 10px;">
+                <button id="btnSkipReactions" style="background: #665544; color: #fff;">⏩ No Usar Reacciones</button>
+                <button id="btnConfirmReactions" class="primary" style="background: linear-gradient(180deg, #27ae60 0%, #1e8449 100%);">⚔️ Confirmar y Resolver</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/hex_grid_data.js"></script>
+    <script src="js/game_engine.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

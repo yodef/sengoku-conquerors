@@ -1,0 +1,671 @@
+/* Sengoku Conquerors 1.4 - Simulator Stylesheet */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Georgia', 'Noto Serif', serif;
+}
+
+body {
+    background-color: #1a1714;
+    color: #332d27;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header & Top Bar */
+header {
+    background: linear-gradient(180deg, #24201c 0%, #151311 100%);
+    border-bottom: 2px solid #b89758;
+    color: #e8dab2;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    z-index: 10;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand h1 {
+    font-size: 1.25rem;
+    letter-spacing: 2px;
+    color: #dfcaa0;
+    text-transform: uppercase;
+}
+
+.brand .version-tag {
+    background: #b89758;
+    color: #1a1714;
+    font-size: 0.75rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.top-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+button {
+    background: linear-gradient(180deg, #3a332a 0%, #29241e 100%);
+    color: #e8dab2;
+    border: 1px solid #b89758;
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-weight: bold;
+}
+
+button:hover:not(:disabled) {
+    background: #b89758;
+    color: #1a1714;
+    box-shadow: 0 0 8px #b89758;
+}
+
+button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: #555;
+}
+
+button.primary {
+    background: linear-gradient(180deg, #8a2424 0%, #631717 100%);
+    border-color: #dfcaa0;
+}
+
+button.primary:hover:not(:disabled) {
+    background: #a82e2e;
+    color: #fff;
+}
+
+/* Big Flow Transition Button */
+.flow-btn {
+    font-size: 0.95rem !important;
+    padding: 10px 14px !important;
+    background: linear-gradient(180deg, #27ae60 0%, #1e8449 100%) !important;
+    border: 2px solid #a9dfbf !important;
+    box-shadow: 0 0 10px rgba(39, 174, 96, 0.4);
+    color: #ffffff !important;
+    text-align: center !important;
+    margin-bottom: 4px;
+}
+
+.flow-btn:hover:not(:disabled) {
+    background: #2ecc71 !important;
+    box-shadow: 0 0 14px rgba(46, 204, 113, 0.7);
+}
+
+/* Main Layout */
+.main-container {
+    display: flex;
+    flex: 1;
+    height: calc(100vh - 54px);
+    overflow: hidden;
+}
+
+/* Sidebars */
+.sidebar {
+    width: 310px;
+    background: #ece3cf;
+    border-right: 2px solid #b89758;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    gap: 10px;
+    overflow-y: auto;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+}
+
+.sidebar.right {
+    width: 330px;
+    border-right: none;
+    border-left: 2px solid #b89758;
+}
+
+.panel-card {
+    background: #fbf7ee;
+    border: 1px solid #c9b48c;
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+}
+
+.panel-card h3 {
+    font-size: 0.92rem;
+    color: #3b3024;
+    border-bottom: 1px solid #d4c2a1;
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* All Players Scoreboard (Persistent) */
+.scoreboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.player-score-card {
+    background: #fff;
+    border: 2px solid #d5c8ad;
+    border-radius: 5px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: all 0.25s ease;
+}
+
+.player-score-card.active-turn {
+    border-color: #d4af37;
+    background: #fffdf5;
+    box-shadow: 0 0 8px rgba(212, 175, 55, 0.7);
+    transform: scale(1.02);
+}
+
+.score-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    font-size: 0.85rem;
+}
+
+.score-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.stat-pill {
+    background: #f4edd8;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid #e2d6bc;
+}
+
+.stat-pill b {
+    display: block;
+    font-size: 0.85rem;
+    color: #2b2216;
+}
+
+/* Turn Prompter & Instructions */
+.prompt-bar {
+    background: #fff8e8;
+    border-left: 4px solid #b89758;
+    padding: 8px;
+    font-size: 0.84rem;
+    line-height: 1.35;
+    color: #4a3e2e;
+}
+
+/* Action Controls Panel */
+.action-buttons-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.action-buttons-group button {
+    text-align: left;
+    padding: 7px 10px;
+    font-size: 0.85rem;
+}
+
+/* Feats List */
+.feats-container {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.feat-item {
+    background: #fff;
+    border: 1px solid #d8caa7;
+    border-radius: 4px;
+    padding: 5px 7px;
+    font-size: 0.76rem;
+    transition: all 0.2s;
+}
+
+.feat-item.feat-claimed {
+    background: #fcf5e3;
+    border-color: #b89758;
+    box-shadow: 0 0 5px rgba(184, 151, 88, 0.4);
+}
+
+.feat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.feat-desc {
+    font-size: 0.7rem;
+    color: #665b4c;
+}
+
+.feat-badge {
+    font-size: 0.68rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+.feat-open {
+    color: #887a66;
+    font-size: 0.68rem;
+}
+
+/* Canvas Viewport */
+.canvas-wrapper {
+    flex: 1;
+    position: relative;
+    background: #110f0d;
+    overflow: hidden;
+    cursor: crosshair;
+}
+
+#boardCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.canvas-floating-controls {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(26, 23, 20, 0.85);
+    border: 1px solid #b89758;
+    padding: 5px 9px;
+    border-radius: 4px;
+    display: flex;
+    gap: 6px;
+}
+
+/* Action Log */
+.log-box {
+    height: 150px;
+    overflow-y: auto;
+    background: #fffdf9;
+    border: 1px solid #d8caa7;
+    border-radius: 3px;
+    padding: 6px;
+    font-size: 0.74rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.log-entry {
+    padding: 3px 5px;
+    border-radius: 3px;
+    border-left: 3px solid #ccc;
+    background: #faf7f0;
+}
+
+.log-action { border-color: #3498db; }
+.log-combat { border-color: #e74c3c; background: #fdf2f2; }
+.log-feat { border-color: #f1c40f; background: #fffde7; font-weight: bold; }
+.log-system { border-color: #8e44ad; font-weight: bold; }
+.log-warning { border-color: #e67e22; background: #fef9e7; }
+.log-time { color: #888; margin-right: 4px; font-weight: bold; }
+
+/* Modals */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.75);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.modal-content {
+    background: #fcf7ee;
+    border: 3px solid #b89758;
+    border-radius: 8px;
+    width: 620px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.modal-content h2 {
+    color: #3b3024;
+    border-bottom: 2px solid #b89758;
+    padding-bottom: 6px;
+    font-size: 1.25rem;
+}
+
+.player-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.player-config-card {
+    background: #fff;
+    border: 1px solid #d5c8ad;
+    padding: 10px;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.rules-config-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 0.82rem;
+}
+
+.modal-field select, .modal-field input {
+    padding: 5px 7px;
+    border: 1px solid #b89758;
+    background: #fff;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.82rem;
+}
+
+/* Marcador de Control de Turno y Mando (Ruleset.pdf v1.4) */
+.turn-control-bar {
+    background: linear-gradient(90deg, #1f1b17 0%, #2a241e 50%, #1f1b17 100%);
+    border-bottom: 2px solid #b89758;
+    padding: 6px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    z-index: 9;
+}
+
+.turn-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: #e8dab2;
+}
+
+.turn-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #c52828;
+    box-shadow: 0 0 8px #c52828;
+    animation: pulseDot 1.5s infinite;
+}
+
+@keyframes pulseDot {
+    0% { transform: scale(0.9); opacity: 0.8; }
+    50% { transform: scale(1.25); opacity: 1; }
+    100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+.turn-label {
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    color: #b89758;
+    font-weight: bold;
+}
+
+.phase-pill {
+    background: #3e3328;
+    color: #f1c40f;
+    border: 1px solid #b89758;
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
+.mando-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+}
+
+.mando-badge {
+    background: linear-gradient(180deg, #d4ac0d 0%, #b7950b 100%);
+    color: #1a1714;
+    font-size: 0.68rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #f9e79f;
+    box-shadow: 0 0 5px rgba(241, 196, 15, 0.4);
+}
+
+.playing-now-badge {
+    background: linear-gradient(180deg, #2c3e50 0%, #1a252f 100%);
+    color: #f3ede2;
+    font-size: 0.65rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #b89758;
+    margin-left: 4px;
+    box-shadow: 0 0 6px rgba(44, 62, 80, 0.45);
+    letter-spacing: 0.5px;
+}
+
+/* Dashboard de Telemetría */
+.telemetry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.telemetry-card {
+    background: #fff;
+    border: 1px solid #d5c8ad;
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.telemetry-card h4 {
+    font-size: 0.9rem;
+    color: #2c251e;
+    border-bottom: 1px solid #e8dab2;
+    padding-bottom: 4px;
+}
+
+.telemetry-stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: #4a3f35;
+}
+
+.telemetry-stat .t-label {
+    color: #665544;
+}
+
+.active-turn {
+    box-shadow: 0 0 12px rgba(241, 196, 15, 0.55) !important;
+    border-right: 3px solid #f1c40f !important;
+}
+
+/* Tabla Matriz de Hazañas con Iniciales RGBY */
+.feats-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.76rem;
+    margin-top: 4px;
+    background: #fff;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.feats-matrix-table th, .feats-matrix-table td {
+    padding: 5px 4px;
+    border: 1px solid #d5c8ad;
+    text-align: center;
+}
+
+.feats-matrix-table th.clan-th {
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 0.82rem;
+    width: 26px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.feats-matrix-table td.feat-name-cell {
+    text-align: left;
+    font-weight: bold;
+    color: #2c251e;
+    padding-left: 6px;
+}
+
+.feats-matrix-table .feat-desc-sub {
+    font-weight: normal;
+    font-size: 0.67rem;
+    color: #7d6b56;
+    display: block;
+    line-height: 1.2;
+    margin-top: 1px;
+}
+
+.feat-cell-claimed {
+    background: #fcf3cf;
+    font-weight: bold;
+    font-size: 0.85rem;
+}
+
+.feat-cell-open {
+    color: #c9bca8;
+    font-size: 0.72rem;
+}
+
+.feat-badge-initial {
+    display: inline-block;
+    width: 19px;
+    height: 19px;
+    line-height: 19px;
+    border-radius: 50%;
+    font-size: 0.72rem;
+    font-weight: bold;
+    text-align: center;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.reaction-card {
+    background: #fff;
+    border: 1px solid #d5c8ad;
+    border-radius: 5px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.reaction-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    font-size: 0.85rem;
+    border-bottom: 1px dashed #e0d5c1;
+    padding-bottom: 4px;
+}
+
+.reaction-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    background: #faf6ee;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid #e5dac6;
+    transition: background 0.15s ease;
+}
+
+.reaction-toggle-row:hover {
+    background: #f5eedf;
+}
+
+.reaction-toggle-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #27ae60;
+    cursor: pointer;
+}
+
+/* Banner de Ronda de Coronación y Regicidio */
+.coronation-banner {
+    background: linear-gradient(90deg, #7b1113 0%, #a93226 50%, #7b1113 100%);
+    border-bottom: 2px solid #ffd700;
+    color: #ffffff;
+    padding: 7px 18px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(169, 50, 38, 0.6);
+    z-index: 10;
+    animation: coronationGlow 2s infinite alternate;
+}
+
+@keyframes coronationGlow {
+    from { box-shadow: 0 2px 8px rgba(241, 196, 15, 0.4); }
+    to { box-shadow: 0 4px 16px rgba(241, 196, 15, 0.85); }
+}
+
+.coronation-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.86rem;
+    font-weight: 500;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+}
+
+.coronation-banner-content b {
+    color: #ffd700;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
